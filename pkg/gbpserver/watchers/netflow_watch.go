@@ -17,6 +17,7 @@ package watchers
 
 import (
 	"github.com/sirupsen/logrus"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	restclient "k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
@@ -32,13 +33,13 @@ const (
 )
 
 type netflowCRD struct {
-	DstAddr           string
-	DstPort           int
-	Version           string
-	ActiveFlowTimeOut int
-	IdleFlowTimeOut   int
-	SamplingRate      int
-	Name              string
+	DstAddr           string `json:"destIp"`
+	DstPort           int    `json:"destPort"`
+	Version           string `json:"flowType,omitempty"`
+	ActiveFlowTimeOut int    `json:"activeFlowTimeOut,omitempty"`
+	IdleFlowTimeOut   int    `json:"idleFlowTimeOut,omitempty"`
+	SamplingRate      int    `json:"samplingRate,omitempty"`
+	Name              string `json:"name"`
 	gs                *gbpserver.Server
 }
 
@@ -56,7 +57,7 @@ func NewNetflowWatcher(gs *gbpserver.Server) (*NetflowWatcher, error) {
 	}
 	logger := logrus.New()
 	logger.Level = level
-	log := logger.WithField("mod", "K8S-W")
+	log := logger.WithField("mod", "NETFLOW-W")
 	cfg, err := restclient.InClusterConfig()
 	if err != nil {
 		return nil, err
@@ -82,7 +83,7 @@ func (nfw *NetflowWatcher) InitNetflowInformer(stopCh <-chan struct{}) error {
 
 func (nfw *NetflowWatcher) watchNetflow(stopCh <-chan struct{}) {
 
-	NetflowLw := cache.NewListWatchFromClient(nfw.rc, "netflowpolicies", sysNs, fields.Everything())
+	NetflowLw := cache.NewListWatchFromClient(nfw.rc, "netflowpolicies", metav1.NamespaceAll, fields.Everything())
 	_, netflowInformer := cache.NewInformer(NetflowLw, &netflowpolicy.NetflowPolicy{}, 0,
 		cache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj interface{}) {
@@ -115,6 +116,7 @@ func (nfw *NetflowWatcher) netflowAdded(obj interface{}) {
 		Version: netflow.Spec.FlowSamplingPolicy.Version,
 	}
 	nfw.gs.AddGBPCustomMo(netflowMO)
+	nfw.log.Infof("AddGBPCustomMo successful")
 }
 
 func (nfw *NetflowWatcher) netflowDeleted(obj interface{}) {
@@ -131,6 +133,7 @@ func (nfw *NetflowWatcher) netflowDeleted(obj interface{}) {
 		Version: netflow.Spec.FlowSamplingPolicy.Version,
 	}
 	nfw.gs.DelGBPCustomMo(netflowMO)
+	nfw.log.Infof("DelGBPCustomMo successful")
 }
 
 func (nf *netflowCRD) Subject() string {
