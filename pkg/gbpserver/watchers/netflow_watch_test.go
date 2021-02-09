@@ -17,9 +17,13 @@ package watchers
 
 import (
 	"fmt"
-	"github.com/noironetworks/aci-containers/pkg/gbpserver"
-	log "github.com/sirupsen/logrus"
 	"testing"
+	"time"
+	//"reflect"
+	//"github.com/davecgh/go-spew/spew"
+	"github.com/noironetworks/aci-containers/pkg/gbpserver"
+	netflowpolicy "github.com/noironetworks/aci-containers/pkg/netflowpolicy/apis/aci.netflow/v1alpha"
+	log "github.com/sirupsen/logrus"
 )
 
 var uriTenant string
@@ -35,16 +39,6 @@ type netflow_suite struct {
 	nf *NetflowWatcher
 }
 
-type testnetflowCRD struct {
-	DstAddr           string `json:"destIp"`
-	DstPort           int    `json:"destPort"`
-	Version           string `json:"flowType,omitempty"`
-	ActiveFlowTimeOut int    `json:"activeFlowTimeOut,omitempty"`
-	IdleFlowTimeOut   int    `json:"idleFlowTimeOut,omitempty"`
-	SamplingRate      int    `json:"samplingRate,omitempty"`
-	Name              string `json:"name,omitempty"`
-}
-
 func (s *netflow_suite) setup() {
 	gCfg := &gbpserver.GBPServerConfig{}
 	gCfg.GRPCPort = 19999
@@ -54,6 +48,7 @@ func (s *netflow_suite) setup() {
 	gCfg.AciPolicyTenant = "defaultTenant"
 	log := log.WithField("mod", "test")
 	s.s = gbpserver.NewServer(gCfg)
+	//s.nf = NewNetflowWatcher(s.s)
 
 	s.nf = &NetflowWatcher{
 		log: log,
@@ -62,49 +57,53 @@ func (s *netflow_suite) setup() {
 	}
 }
 
-func (nt *testnetflowCRD) Subject() string {
-	return testnetflowCRDSub
-}
-
-func (nt *testnetflowCRD) URI() string {
-	return fmt.Sprintf("%s%s/", uriTenant, testnetflowCRDSub)
-}
-
-func (nt *testnetflowCRD) Properties() map[string]interface{} {
-	return map[string]interface{}{
-		"dstAddr":           nt.DstAddr,
-		"dstPort":           nt.DstPort,
-		"version":           nt.Version,
-		"activeFlowTimeOut": nt.ActiveFlowTimeOut,
-		"idleFlowTimeOut":   nt.IdleFlowTimeOut,
-		"samplingRate":      nt.SamplingRate,
-		"name":              nt.Name,
+func (s *netflow_suite) expectOp(op int) error {
+	gotOp, _, err := s.s.UTReadMsg(200 * time.Millisecond)
+	if err != nil {
+		return err
 	}
+
+	if gotOp != op {
+		return fmt.Errorf("Exp op: %d, got: %d", op, gotOp)
+	}
+
+	return nil
 }
 
-func (nt *testnetflowCRD) ParentSub() string {
-	return testnetflowCRDParentSub
-}
-
-func (nt *testnetflowCRD) ParentURI() string {
-	return testCRDParentUri
-}
-
-func (nt *testnetflowCRD) Children() []string {
-	return []string{}
+var netflow_policy = netflowpolicy.NetflowType{
+	DstAddr:           "1.1.1.1",
+	DstPort:           2055,
+	Version:           "netflow",
+	ActiveFlowTimeOut: 60,
+	IdleFlowTimeOut:   15,
+	SamplingRate:      5,
 }
 
 func TestNetflowGBP(t *testing.T) {
 	ns := &netflow_suite{}
 	ns.setup()
 
-	netflowcrd := &testnetflowCRD{
-		DstAddr: "1.1.1.1",
-		DstPort: 2055,
-		Version: "netflow",
+	netflowcrd := &netflowCRD{
+		DstAddr:           "1.1.1.1",
+		DstPort:           2055,
+		Version:           "netflow",
+		ActiveFlowTimeOut: 60,
+		IdleFlowTimeOut:   15,
+		SamplingRate:      5,
 	}
 	ns.s.AddGBPCustomMo(netflowcrd)
 
 	ns.s.DelGBPCustomMo(netflowcrd)
+
+	ns.nf.netflowAdded(&netflowpolicy.NetflowPolicySpec{FlowSamplingPolicy: netflow_policy})
+	err := ns.expectOp(gbpserver.OpaddGBPCustomMo)
+	if err != nil {
+		t.Error(err)
+	}
+	ns.nf.netflowDeleted(&netflowpolicy.NetflowPolicySpec{FlowSamplingPolicy: netflow_policy})
+	err = ns.expectOp(gbpserver.OpdelGBPCustomMo)
+	if err != nil {
+		t.Error(err)
+	}
 
 }

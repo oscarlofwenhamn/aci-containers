@@ -39,8 +39,6 @@ type netflowCRD struct {
 	ActiveFlowTimeOut int    `json:"activeFlowTimeOut,omitempty"`
 	IdleFlowTimeOut   int    `json:"idleFlowTimeOut,omitempty"`
 	SamplingRate      int    `json:"samplingRate,omitempty"`
-	Name              string `json:"name"`
-	gs                *gbpserver.Server
 }
 
 type NetflowWatcher struct {
@@ -111,9 +109,12 @@ func (nfw *NetflowWatcher) netflowAdded(obj interface{}) {
 
 	nfw.log.Infof("netflowAdded - %s", netflow.ObjectMeta.Name)
 	netflowMO := &netflowCRD{
-		DstAddr: netflow.Spec.FlowSamplingPolicy.DstAddr,
-		DstPort: netflow.Spec.FlowSamplingPolicy.DstPort,
-		Version: netflow.Spec.FlowSamplingPolicy.Version,
+		DstAddr:           netflow.Spec.FlowSamplingPolicy.DstAddr,
+		DstPort:           netflow.Spec.FlowSamplingPolicy.DstPort,
+		Version:           netflow.Spec.FlowSamplingPolicy.Version,
+		ActiveFlowTimeOut: netflow.Spec.FlowSamplingPolicy.ActiveFlowTimeOut,
+		IdleFlowTimeOut:   netflow.Spec.FlowSamplingPolicy.IdleFlowTimeOut,
+		SamplingRate:      netflow.Spec.FlowSamplingPolicy.SamplingRate,
 	}
 	nfw.gs.AddGBPCustomMo(netflowMO)
 	nfw.log.Infof("AddGBPCustomMo successful")
@@ -128,9 +129,12 @@ func (nfw *NetflowWatcher) netflowDeleted(obj interface{}) {
 
 	nfw.log.Infof("netflowDeleted - %s", netflow.ObjectMeta.Name)
 	netflowMO := &netflowCRD{
-		DstAddr: netflow.Spec.FlowSamplingPolicy.DstAddr,
-		DstPort: netflow.Spec.FlowSamplingPolicy.DstPort,
-		Version: netflow.Spec.FlowSamplingPolicy.Version,
+		DstAddr:           netflow.Spec.FlowSamplingPolicy.DstAddr,
+		DstPort:           netflow.Spec.FlowSamplingPolicy.DstPort,
+		Version:           netflow.Spec.FlowSamplingPolicy.Version,
+		ActiveFlowTimeOut: netflow.Spec.FlowSamplingPolicy.ActiveFlowTimeOut,
+		IdleFlowTimeOut:   netflow.Spec.FlowSamplingPolicy.IdleFlowTimeOut,
+		SamplingRate:      netflow.Spec.FlowSamplingPolicy.SamplingRate,
 	}
 	nfw.gs.DelGBPCustomMo(netflowMO)
 	nfw.log.Infof("DelGBPCustomMo successful")
@@ -141,7 +145,9 @@ func (nf *netflowCRD) Subject() string {
 }
 
 func (nf *netflowCRD) URI() string {
-	return nf.gs.GetURIBySubject("NetflowExporterConfig")
+	gServer := &gbpserver.Server{}
+	nfURI := gServer.GetURIBySubject("NetflowExporterConfig")
+	return nfURI
 }
 
 func (nf *netflowCRD) ParentSub() string {
@@ -149,7 +155,9 @@ func (nf *netflowCRD) ParentSub() string {
 }
 
 func (nf *netflowCRD) ParentURI() string {
-	return nf.gs.GetURIBySubject("PlatformConfig")
+	gServer := &gbpserver.Server{}
+	nfParentURI := gServer.GetURIBySubject("PlatformConfig")
+	return nfParentURI
 }
 
 func (nf *netflowCRD) Properties() map[string]interface{} {
@@ -160,7 +168,6 @@ func (nf *netflowCRD) Properties() map[string]interface{} {
 		"activeFlowTimeOut": nf.ActiveFlowTimeOut,
 		"idleFlowTimeOut":   nf.IdleFlowTimeOut,
 		"samplingRate":      nf.SamplingRate,
-		"name":              nf.Name,
 	}
 }
 
