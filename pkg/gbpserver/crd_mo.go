@@ -36,6 +36,11 @@ func (s *Server) GetTenantURI() string {
 	return getTenantUri()
 }
 
+// GetPlatformURI helper for watchers to get the platform uri
+func (s *Server) GetPlatformURI() string {
+	return getPlatformUri()
+}
+
 // GetURIBySubject helper for watchers to get a parent URI
 func (s *Server) GetURIBySubject(sub string) string {
 	gMutex.Lock()

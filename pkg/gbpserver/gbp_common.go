@@ -130,6 +130,14 @@ func getTenantName() string {
 	return "undefined"
 }
 
+func getAciVmmDomain() string {
+	if theServer != nil {
+		return theServer.config.AciVmmDomain
+	}
+
+	return "undefined"
+}
+
 func getVrfName() string {
 	if theServer != nil {
 		return theServer.config.AciVrf
@@ -138,8 +146,17 @@ func getVrfName() string {
 	return "undefined"
 }
 
+func getDefPConfigName(domain string) string {
+	return fmt.Sprintf("comp/prov-Kubernetes/ctrlr-[%s]-%s/sw-InsiemeLSOid", domain, domain)
+}
+
 func getTenantUri() string {
 	return fmt.Sprintf("/PolicyUniverse/PolicySpace/%s/", getTenantName())
+}
+
+func getPlatformUri() string {
+	pConfigName := getDefPConfigName(getAciVmmDomain())
+	return fmt.Sprintf("/PolicyUniverse/PlatformConfig/%s/", escapeName(pConfigName, false))
 }
 
 func getVrfUri() string {
@@ -507,10 +524,6 @@ func escapeName(n string, undo bool) string {
 	return n
 }
 
-func getDefPConfigName(domain string) string {
-	return fmt.Sprintf("comp/prov-Kubernetes/ctrlr-[%s]-%s/sw-InsiemeLSOid", domain, domain)
-}
-
 func CreateRoot(config *GBPServerConfig) {
 	// DmtreeRoot
 	rMo := &gbpBaseMo{
@@ -597,7 +610,8 @@ func CreateRoot(config *GBPServerConfig) {
 	}
 
 	dcToCR := createChild(dcMo, "DomainConfigToConfigRSrc", "")
-	pConfURI := fmt.Sprintf("/PolicyUniverse/PlatformConfig/%s/", escapeName(pConfigName, false))
+	//pConfURI := fmt.Sprintf("/PolicyUniverse/PlatformConfig/%s/", escapeName(pConfigName, false))
+	pConfURI := getPlatformUri()
 	refP := Reference{Subject: "PlatformConfig", ReferenceUri: pConfURI}
 	dcToCR.AddProperty(propTarget, refP)
 

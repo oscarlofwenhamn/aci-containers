@@ -16,7 +16,8 @@ limitations under the License.
 package watchers
 
 import (
-	"github.com/sirupsen/logrus"
+	"fmt"
+	log "github.com/sirupsen/logrus"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	restclient "k8s.io/client-go/rest"
@@ -39,21 +40,22 @@ type netflowCRD struct {
 	ActiveFlowTimeOut int    `json:"activeFlowTimeOut,omitempty"`
 	IdleFlowTimeOut   int    `json:"idleFlowTimeOut,omitempty"`
 	SamplingRate      int    `json:"samplingRate,omitempty"`
+	Name              string `json:"name,omitempty"`
 }
 
 type NetflowWatcher struct {
-	log *logrus.Entry
+	log *log.Entry
 	gs  *gbpserver.Server
 	idb *intentDB
 	rc  restclient.Interface
 }
 
 func NewNetflowWatcher(gs *gbpserver.Server) (*NetflowWatcher, error) {
-	level, err := logrus.ParseLevel(gs.Config().WatchLogLevel)
+	level, err := log.ParseLevel(gs.Config().WatchLogLevel)
 	if err != nil {
 		panic(err.Error())
 	}
-	logger := logrus.New()
+	logger := log.New()
 	logger.Level = level
 	log := logger.WithField("mod", "NETFLOW-W")
 	cfg, err := restclient.InClusterConfig()
@@ -115,9 +117,9 @@ func (nfw *NetflowWatcher) netflowAdded(obj interface{}) {
 		ActiveFlowTimeOut: netflow.Spec.FlowSamplingPolicy.ActiveFlowTimeOut,
 		IdleFlowTimeOut:   netflow.Spec.FlowSamplingPolicy.IdleFlowTimeOut,
 		SamplingRate:      netflow.Spec.FlowSamplingPolicy.SamplingRate,
+		Name:              netflow.ObjectMeta.Name,
 	}
 	nfw.gs.AddGBPCustomMo(netflowMO)
-	nfw.log.Infof("AddGBPCustomMo successful")
 }
 
 func (nfw *NetflowWatcher) netflowDeleted(obj interface{}) {
@@ -135,9 +137,33 @@ func (nfw *NetflowWatcher) netflowDeleted(obj interface{}) {
 		ActiveFlowTimeOut: netflow.Spec.FlowSamplingPolicy.ActiveFlowTimeOut,
 		IdleFlowTimeOut:   netflow.Spec.FlowSamplingPolicy.IdleFlowTimeOut,
 		SamplingRate:      netflow.Spec.FlowSamplingPolicy.SamplingRate,
+		Name:              netflow.ObjectMeta.Name,
 	}
 	nfw.gs.DelGBPCustomMo(netflowMO)
-	nfw.log.Infof("DelGBPCustomMo successful")
+}
+
+func (nf *netflowCRD) fillNetflowDefaults() {
+
+	// setting default values if no values present for netflow attributes.
+	if nf.Version == "netflow" {
+		nf.Version = "v5"
+	} else if nf.Version == "ipfix" {
+		nf.Version = "v9"
+	} else {
+		nf.Version = "v5"
+	}
+	if nf.DstPort == 0 {
+		nf.DstPort = 2055
+	}
+	if nf.ActiveFlowTimeOut == 0 {
+		nf.ActiveFlowTimeOut = 60
+	}
+	if nf.IdleFlowTimeOut == 0 {
+		nf.IdleFlowTimeOut = 15
+	}
+	if nf.SamplingRate == 0 {
+		nf.SamplingRate = 0
+	}
 }
 
 func (nf *netflowCRD) Subject() string {
@@ -146,8 +172,22 @@ func (nf *netflowCRD) Subject() string {
 
 func (nf *netflowCRD) URI() string {
 	gServer := &gbpserver.Server{}
-	nfURI := gServer.GetURIBySubject("NetflowExporterConfig")
-	return nfURI
+	platformURI := gServer.GetPlatformURI()
+	return fmt.Sprintf("%s%s/%s/", platformURI, netflowCRDSub, nf.Name)
+}
+
+func (nf *netflowCRD) Properties() map[string]interface{} {
+
+	nf.fillNetflowDefaults()
+	return map[string]interface{}{
+		"dstAddr":           nf.DstAddr,
+		"dstPort":           nf.DstPort,
+		"version":           nf.Version,
+		"activeFlowTimeOut": nf.ActiveFlowTimeOut,
+		"idleFlowTimeOut":   nf.IdleFlowTimeOut,
+		"samplingRate":      nf.SamplingRate,
+		"name":              nf.Name,
+	}
 }
 
 func (nf *netflowCRD) ParentSub() string {
@@ -156,19 +196,8 @@ func (nf *netflowCRD) ParentSub() string {
 
 func (nf *netflowCRD) ParentURI() string {
 	gServer := &gbpserver.Server{}
-	nfParentURI := gServer.GetURIBySubject("PlatformConfig")
+	nfParentURI := gServer.GetPlatformURI()
 	return nfParentURI
-}
-
-func (nf *netflowCRD) Properties() map[string]interface{} {
-	return map[string]interface{}{
-		"dstAddr":           nf.DstAddr,
-		"dstPort":           nf.DstPort,
-		"version":           nf.Version,
-		"activeFlowTimeOut": nf.ActiveFlowTimeOut,
-		"idleFlowTimeOut":   nf.IdleFlowTimeOut,
-		"samplingRate":      nf.SamplingRate,
-	}
 }
 
 func (nf *netflowCRD) Children() []string {

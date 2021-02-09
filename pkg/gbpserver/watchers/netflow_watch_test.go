@@ -17,13 +17,13 @@ package watchers
 
 import (
 	"fmt"
-	"testing"
-	"time"
-	//"reflect"
-	//"github.com/davecgh/go-spew/spew"
+	"github.com/davecgh/go-spew/spew"
 	"github.com/noironetworks/aci-containers/pkg/gbpserver"
 	netflowpolicy "github.com/noironetworks/aci-containers/pkg/netflowpolicy/apis/aci.netflow/v1alpha"
 	log "github.com/sirupsen/logrus"
+	"reflect"
+	"testing"
+	"time"
 )
 
 var uriTenant string
@@ -57,6 +57,25 @@ func (s *netflow_suite) setup() {
 	}
 }
 
+func (s *netflow_suite) expectMsg(op int, msg interface{}) error {
+	gotOp, gotMsg, err := s.s.UTReadMsg(200 * time.Millisecond)
+	if err != nil {
+		return err
+	}
+
+	if gotOp != op {
+		return fmt.Errorf("Exp op: %d, got: %d", op, gotOp)
+	}
+
+	if !reflect.DeepEqual(msg, gotMsg) {
+		spew.Dump(msg)
+		spew.Dump(gotMsg)
+		return fmt.Errorf("msgs don't match")
+	}
+
+	return nil
+}
+
 func (s *netflow_suite) expectOp(op int) error {
 	gotOp, _, err := s.s.UTReadMsg(200 * time.Millisecond)
 	if err != nil {
@@ -83,7 +102,7 @@ func TestNetflowGBP(t *testing.T) {
 	ns := &netflow_suite{}
 	ns.setup()
 
-	netflowcrd := &netflowCRD{
+	netflowMO := &netflowCRD{
 		DstAddr:           "1.1.1.1",
 		DstPort:           2055,
 		Version:           "netflow",
@@ -91,9 +110,9 @@ func TestNetflowGBP(t *testing.T) {
 		IdleFlowTimeOut:   15,
 		SamplingRate:      5,
 	}
-	ns.s.AddGBPCustomMo(netflowcrd)
+	ns.s.AddGBPCustomMo(netflowMO)
 
-	ns.s.DelGBPCustomMo(netflowcrd)
+	ns.s.DelGBPCustomMo(netflowMO)
 
 	ns.nf.netflowAdded(&netflowpolicy.NetflowPolicySpec{FlowSamplingPolicy: netflow_policy})
 	err := ns.expectOp(gbpserver.OpaddGBPCustomMo)
