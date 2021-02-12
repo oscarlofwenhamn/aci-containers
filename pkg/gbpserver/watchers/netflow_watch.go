@@ -51,7 +51,8 @@ type NetflowWatcher struct {
 }
 
 func NewNetflowWatcher(gs *gbpserver.Server) (*NetflowWatcher, error) {
-	level, err := log.ParseLevel(gs.Config().WatchLogLevel)
+	gcfg := gs.Config()
+	level, err := log.ParseLevel(gcfg.WatchLogLevel)
 	if err != nil {
 		panic(err.Error())
 	}

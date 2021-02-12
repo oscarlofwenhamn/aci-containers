@@ -21,12 +21,15 @@ import (
 	"github.com/noironetworks/aci-containers/pkg/gbpserver"
 	netflowpolicy "github.com/noironetworks/aci-containers/pkg/netflowpolicy/apis/aci.netflow/v1alpha"
 	log "github.com/sirupsen/logrus"
+	"github.com/stretchr/testify/assert"
 	"reflect"
 	"testing"
 	"time"
+	//restclient "k8s.io/client-go/rest"
 )
 
 var uriTenant string
+var err error
 
 const (
 	testnetflowCRDSub       = "NetflowExporterConfig"
@@ -35,20 +38,18 @@ const (
 )
 
 type netflow_suite struct {
-	s  *gbpserver.Server
-	nf *NetflowWatcher
+	s     *gbpserver.Server
+	nf    *NetflowWatcher
+	nfgbp *netflowCRD
 }
 
 func (s *netflow_suite) setup() {
+
 	gCfg := &gbpserver.GBPServerConfig{}
-	gCfg.GRPCPort = 19999
-	gCfg.ProxyListenPort = 8899
-	gCfg.PodSubnet = "10.2.56.1/21"
-	gCfg.NodeSubnet = "1.100.201.0/24"
-	gCfg.AciPolicyTenant = "defaultTenant"
+	gCfg.WatchLogLevel = "info"
 	log := log.WithField("mod", "test")
 	s.s = gbpserver.NewServer(gCfg)
-	//s.nf = NewNetflowWatcher(s.s)
+	s.nf, err = NewNetflowWatcher(s.s)
 
 	s.nf = &NetflowWatcher{
 		log: log,
@@ -89,7 +90,20 @@ func (s *netflow_suite) expectOp(op int) error {
 	return nil
 }
 
-var netflow_policy = netflowpolicy.NetflowType{
+var netflowPolicyType = netflowpolicy.NetflowType{
+	DstAddr:           "1.1.1.1",
+	DstPort:           2055,
+	Version:           "netflow",
+	ActiveFlowTimeOut: 60,
+	IdleFlowTimeOut:   15,
+	SamplingRate:      5,
+}
+
+var netflowPolicy = netflowpolicy.NetflowPolicySpec{
+	FlowSamplingPolicy: netflowPolicyType,
+}
+
+var netflowPolicyGBP = &netflowCRD{
 	DstAddr:           "1.1.1.1",
 	DstPort:           2055,
 	Version:           "netflow",
@@ -102,27 +116,51 @@ func TestNetflowGBP(t *testing.T) {
 	ns := &netflow_suite{}
 	ns.setup()
 
-	netflowMO := &netflowCRD{
-		DstAddr:           "1.1.1.1",
-		DstPort:           2055,
-		Version:           "netflow",
-		ActiveFlowTimeOut: 60,
-		IdleFlowTimeOut:   15,
-		SamplingRate:      5,
-	}
-	ns.s.AddGBPCustomMo(netflowMO)
-
-	ns.s.DelGBPCustomMo(netflowMO)
-
-	ns.nf.netflowAdded(&netflowpolicy.NetflowPolicySpec{FlowSamplingPolicy: netflow_policy})
-	err := ns.expectOp(gbpserver.OpaddGBPCustomMo)
-	if err != nil {
-		t.Error(err)
-	}
-	ns.nf.netflowDeleted(&netflowpolicy.NetflowPolicySpec{FlowSamplingPolicy: netflow_policy})
-	err = ns.expectOp(gbpserver.OpdelGBPCustomMo)
+	ns.nf.netflowAdded(&netflowpolicy.NetflowPolicy{Spec: netflowPolicy})
+	err := ns.expectMsg(gbpserver.OpaddGBPCustomMo, netflowPolicyGBP)
 	if err != nil {
 		t.Error(err)
 	}
 
+	ns.nf.netflowDeleted(&netflowpolicy.NetflowPolicy{Spec: netflowPolicy})
+	err = ns.expectMsg(gbpserver.OpdelGBPCustomMo, netflowPolicyGBP)
+	if err != nil {
+		t.Error(err)
+	}
+}
+
+func TestNetflowGBPConfig(t *testing.T) {
+	testData := []struct {
+		sub string
+		//parenturi  string
+		parentSubj string
+		//uri        string
+		//children   []string
+	}{
+		{"NetflowExporterConfig",
+			//"/PolicyUniverse/PlatformConfig/comp%2fprov-Kubernetes%2fctrlr-%5bkubernetes%5d-kubernetes%2fsw-InsiemeLSOid/",
+			"PlatformConfig"},
+		//"/PolicyUniverse/PlatformConfig/comp%2fprov-Kubernetes%2fctrlr-%5bkubernetes%5d-kubernetes%2fsw-InsiemeLSOid/NetflowExporterConfig/netflow-policy/",
+
+	}
+
+	ns := &netflow_suite{}
+	ns.setup()
+
+	for _, td := range testData {
+		sub := ns.nfgbp.Subject()
+		assert.Equal(t, td.sub, sub)
+
+		parentsub := ns.nfgbp.ParentSub()
+		assert.Equal(t, td.parentSubj, parentsub)
+
+		// parenturi := ns.nfgbp.URI()
+		// assert.Equal(t, td.parenturi, parenturi)
+
+		// uri := ns.nfgbp.URI()
+		// assert.Equal(t, td.uri, uri)
+
+		// children := ns.nfgbp.Children()
+		// assert.Equal(t, td.children, children)
+	}
 }
