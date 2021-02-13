@@ -449,6 +449,7 @@ func (agent *HostAgent) podUpdated(obj interface{}) {
 	agent.netPolPods.UpdatePodNoCallback(obj.(*v1.Pod))
 	agent.qosPolPods.UpdatePodNoCallback(obj.(*v1.Pod))
 	agent.handleObjectUpdateForSnat(obj)
+	agent.log.Info("calling pod locked changed")
 	agent.podChangedLocked(obj)
 }
 
@@ -483,6 +484,7 @@ func (agent *HostAgent) podChangedLocked(podobj interface{}) {
 		agent.podIpToName[pod.Status.PodIP] = epMetaKey
 	}
 	agent.podUidToName[epUuid] = epMetaKey
+	agent.log.Info("calling assign groups changed")
 	epGroup, secGroup, qpGroup, _ := agent.assignGroups(pod)
 	epAttributes := pod.ObjectMeta.Labels
 	if epAttributes == nil {

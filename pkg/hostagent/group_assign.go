@@ -198,16 +198,22 @@ func (agent *HostAgent) assignGroups(pod *v1.Pod) (metadata.OpflexGroup, []metad
 	sgval = agent.config.DefaultSg
 	qpval = agent.config.DefaultQp
 
+	agent.log.Info("defaulteg, ", egval)
+	agent.log.Info("defaultsg, ", sgval)
+	agent.log.Info("defaultqp, ", qpval)
 	// configured namespace override has next-highest priority
 	if nseg, ok := agent.config.NamespaceDefaultEg[pod.Namespace]; ok {
+		agent.log.Info("namespacedefaulteg, ", nseg)
 		egval = nseg
 	}
 
 	if nssgs, ok := agent.config.NamespaceDefaultSg[pod.Namespace]; ok {
+		agent.log.Info("namespacedefaultsg, ", nssgs)
 		sgval = nssgs
 	}
 
 	if nsqp, ok := agent.config.NamespaceDefaultQp[pod.Namespace]; ok {
+		agent.log.Info("namespacedefaultqp, ", nsqp)
 		qpval = nsqp
 	}
 
@@ -216,6 +222,7 @@ func (agent *HostAgent) assignGroups(pod *v1.Pod) (metadata.OpflexGroup, []metad
 	if exists && namespaceobj != nil {
 		namespace = namespaceobj.(*v1.Namespace)
 		var temp metadata.OpflexGroup
+		agent.log.Info("namespace annotation")
 		decodeAnnotation(namespace.ObjectMeta.Annotations[metadata.EgAnnotation], &temp, logger, "namespace[EpgAnnotation]")
 
 		// For OpenShift installations <= 3.11, we want to offset
@@ -241,12 +248,14 @@ func (agent *HostAgent) assignGroups(pod *v1.Pod) (metadata.OpflexGroup, []metad
 	// annotation on parent deployment or rc is next-highest priority
 	egAnn, sgAnn, qpAnn, found := agent.getParentAnn(podkey)
 	if found {
+		agent.log.Info("deployment annotation")
 		decodeAnnotation(egAnn, &egval, logger, "deployment/rc[EpgAnnotation]")
 		decodeAnnotation(sgAnn, &sgval, logger, "deployment/rc[SgAnnotation]")
 		decodeAnnotation(qpAnn, &qpval, logger, "deployment/rc[QpAnnotation]")
 	}
 
 	// direct pod annotation is highest priority
+	agent.log.Info("pod annotation")
 	decodeAnnotation(pod.ObjectMeta.Annotations[metadata.EgAnnotation], &egval, logger, "pod[EpgAnnotation]")
 	decodeAnnotation(pod.ObjectMeta.Annotations[metadata.QpAnnotation], &qpval, logger, "pod[QpAnnotation]")
 	decodeAnnotation(pod.ObjectMeta.Annotations[metadata.SgAnnotation], &sgval, logger, "pod[SgAnnotation]")
